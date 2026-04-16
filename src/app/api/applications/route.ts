@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { z } from "zod";
+import { connectDB } from "@/lib/db";
+import { ApplicationModel } from "@/models/Application";
+import { ReminderModel } from "@/models/Reminder";
+import { UserModel } from "@/models/User";
 
 const DEMO_USER_ID = "demo-user";
 
@@ -18,11 +21,11 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
-    const applications = await db.application.findMany({
-      where: { userId: DEMO_USER_ID },
-      include: { reminders: true },
-      orderBy: { order: "asc" },
-    });
+    await connectDB();
+    const applications = await ApplicationModel
+      .find({ userId: DEMO_USER_ID })
+      .populate("reminders")
+      .sort({ order: 1 });
     return NextResponse.json(applications);
   } catch (error) {
     console.error("GET /api/applications error:", error);
@@ -32,50 +35,48 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await connectDB();
     const body = await request.json();
     const data = createSchema.parse(body);
 
     // Ensure demo user exists
-    await db.user.upsert({
-      where: { id: DEMO_USER_ID },
-      create: { id: DEMO_USER_ID, email: "demo@career-os.dev" },
-      update: {},
+    await UserModel.findOneAndUpdate(
+      { _id: DEMO_USER_ID },
+      { $setOnInsert: { _id: DEMO_USER_ID, email: "demo@career-os.dev" } },
+      { upsert: true }
+    );
+
+    const count = await ApplicationModel.countDocuments({
+      userId: DEMO_USER_ID,
+      status: data.status,
     });
 
-    const count = await db.application.count({
-      where: { userId: DEMO_USER_ID, status: data.status },
-    });
-
-    const application = await db.application.create({
-      data: {
-        userId: DEMO_USER_ID,
-        company: data.company,
-        role: data.role,
-        status: data.status,
-        salaryRange: data.salaryRange || null,
-        source: data.source || null,
-        url: data.url || null,
-        deadline: data.deadline ? new Date(data.deadline) : null,
-        notes: data.notes || null,
-        appliedAt: data.appliedAt ? new Date(data.appliedAt) : null,
-        order: count,
-      },
-      include: { reminders: true },
+    const application = await ApplicationModel.create({
+      userId: DEMO_USER_ID,
+      company: data.company,
+      role: data.role,
+      status: data.status,
+      salaryRange: data.salaryRange || null,
+      source: data.source || null,
+      url: data.url || null,
+      deadline: data.deadline ? new Date(data.deadline) : null,
+      notes: data.notes || null,
+      appliedAt: data.appliedAt ? new Date(data.appliedAt) : null,
+      order: count,
     });
 
     // Auto-create follow-up reminder for APPLIED status
     if (data.status === "APPLIED") {
-      await db.reminder.create({
-        data: {
-          applicationId: application.id,
-          type: "FOLLOW_UP",
-          sendAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days
-          message: `Follow up with ${data.company} about ${data.role}`,
-        },
+      await ReminderModel.create({
+        applicationId: application._id,
+        type: "FOLLOW_UP",
+        sendAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        message: `Follow up with ${data.company} about ${data.role}`,
       });
     }
 
-    return NextResponse.json(application, { status: 201 });
+    const populated = await ApplicationModel.findById(application._id).populate("reminders");
+    return NextResponse.json(populated, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 });

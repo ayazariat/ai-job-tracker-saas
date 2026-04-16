@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { z } from "zod";
+import { connectDB } from "@/lib/db";
+import { ReminderModel } from "@/models/Reminder";
+import { ApplicationModel } from "@/models/Application";
 
 const createSchema = z.object({
   applicationId: z.string(),
@@ -11,10 +13,12 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
-    const reminders = await db.reminder.findMany({
-      include: { application: true },
-      orderBy: { sendAt: "asc" },
-    });
+    await connectDB();
+    void ApplicationModel; // ensure registered for populate
+    const reminders = await ReminderModel
+      .find()
+      .populate("application")
+      .sort({ sendAt: 1 });
     return NextResponse.json(reminders);
   } catch (error) {
     console.error("GET /api/reminders error:", error);
@@ -24,20 +28,20 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await connectDB();
     const body = await request.json();
     const data = createSchema.parse(body);
 
-    const reminder = await db.reminder.create({
-      data: {
-        applicationId: data.applicationId,
-        type: data.type,
-        sendAt: new Date(data.sendAt),
-        message: data.message,
-      },
-      include: { application: true },
+    void ApplicationModel; // ensure registered for populate
+    const reminder = await ReminderModel.create({
+      applicationId: data.applicationId,
+      type: data.type,
+      sendAt: new Date(data.sendAt),
+      message: data.message,
     });
 
-    return NextResponse.json(reminder, { status: 201 });
+    const populated = await ReminderModel.findById(reminder._id).populate("application");
+    return NextResponse.json(populated, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 });

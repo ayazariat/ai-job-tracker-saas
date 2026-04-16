@@ -1,19 +1,32 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { connectDB } from "@/lib/db";
+import { ApplicationModel } from "@/models/Application";
+import { AiMatchModel } from "@/models/AiMatch";
+import { CvVersionModel } from "@/models/CvVersion";
 
 const DEMO_USER_ID = "demo-user";
 
+type StatusKey = "WISHLIST" | "APPLIED" | "INTERVIEW" | "OFFER" | "REJECTED";
+
 export async function GET() {
   try {
-    const applications = await db.application.findMany({
-      where: { userId: DEMO_USER_ID },
-      include: { aiMatches: { include: { cvVersion: true } } },
-      orderBy: { createdAt: "asc" },
-    });
+    await connectDB();
+    // Ensure model registrations are in scope for populate
+    void AiMatchModel;
+    void CvVersionModel;
+
+    const applications = await ApplicationModel
+      .find({ userId: DEMO_USER_ID })
+      .populate({ path: "aiMatches", populate: { path: "cvVersion" } })
+      .sort({ createdAt: 1 })
+      .lean({ virtuals: true });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const apps = applications as any[];
 
     // Applications per week
     const weeklyData: Record<string, number> = {};
-    applications.forEach((app) => {
+    apps.forEach((app) => {
       const date = new Date(app.createdAt);
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
@@ -26,19 +39,19 @@ export async function GET() {
       .slice(-12);
 
     // Status distribution
-    const statusCounts = {
+    const statusCounts: Record<StatusKey, number> = {
       WISHLIST: 0,
       APPLIED: 0,
       INTERVIEW: 0,
       OFFER: 0,
       REJECTED: 0,
     };
-    applications.forEach((app) => {
-      statusCounts[app.status]++;
+    apps.forEach((app) => {
+      statusCounts[app.status as StatusKey]++;
     });
 
-    const total = applications.length;
-    const applied = applications.filter((a) => a.status !== "WISHLIST").length;
+    const total = apps.length;
+    const applied = apps.filter((a) => a.status !== "WISHLIST").length;
     const interviews = statusCounts.INTERVIEW;
     const offers = statusCounts.OFFER;
     const rejected = statusCounts.REJECTED;
@@ -49,8 +62,8 @@ export async function GET() {
 
     // Source breakdown
     const sourceCounts: Record<string, number> = {};
-    applications.forEach((app) => {
-      const source = app.source || "Unknown";
+    apps.forEach((app) => {
+      const source = (app.source as string) || "Unknown";
       sourceCounts[source] = (sourceCounts[source] || 0) + 1;
     });
 
@@ -60,17 +73,17 @@ export async function GET() {
 
     // CV version performance
     const cvPerformance: Record<string, { name: string; avgScore: number; count: number }> = {};
-    applications.forEach((app) => {
-      app.aiMatches.forEach((match) => {
-        const cvId = match.cvVersionId;
+    apps.forEach((app) => {
+      (app.aiMatches as any[] ?? []).forEach((match: any) => {
+        const cvId = match.cvVersionId as string;
         if (!cvPerformance[cvId]) {
           cvPerformance[cvId] = {
-            name: match.cvVersion.name,
+            name: match.cvVersion?.name ?? cvId,
             avgScore: 0,
             count: 0,
           };
         }
-        cvPerformance[cvId].avgScore += match.matchScore;
+        cvPerformance[cvId].avgScore += match.matchScore as number;
         cvPerformance[cvId].count++;
       });
     });
@@ -80,16 +93,16 @@ export async function GET() {
     });
 
     // Company response speed
-    const companyResponseSpeed = applications
+    const companyResponseSpeed = apps
       .filter((a) => a.appliedAt && a.status !== "WISHLIST" && a.status !== "APPLIED")
       .map((a) => ({
-        company: a.company,
-        role: a.role,
+        company: a.company as string,
+        role: a.role as string,
         daysToResponse: Math.floor(
-          (new Date(a.updatedAt).getTime() - new Date(a.appliedAt!).getTime()) /
+          (new Date(a.updatedAt).getTime() - new Date(a.appliedAt).getTime()) /
             (1000 * 60 * 60 * 24)
         ),
-        status: a.status,
+        status: a.status as string,
       }))
       .sort((a, b) => a.daysToResponse - b.daysToResponse)
       .slice(0, 10);

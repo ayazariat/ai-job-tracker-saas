@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { analyzeResumeMatch } from "@/lib/ai";
 import { z } from "zod";
+import { connectDB } from "@/lib/db";
+import { analyzeResumeMatch } from "@/lib/ai";
+import { UserModel } from "@/models/User";
+import { CvVersionModel } from "@/models/CvVersion";
+import { AiMatchModel } from "@/models/AiMatch";
+import { ApplicationModel } from "@/models/Application";
 
 const DEMO_USER_ID = "demo-user";
 
@@ -14,28 +18,25 @@ const matchSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    await connectDB();
     const body = await request.json();
     const data = matchSchema.parse(body);
 
     // Ensure demo user exists
-    await db.user.upsert({
-      where: { id: DEMO_USER_ID },
-      create: { id: DEMO_USER_ID, email: "demo@career-os.dev" },
-      update: {},
-    });
+    await UserModel.findOneAndUpdate(
+      { _id: DEMO_USER_ID },
+      { $setOnInsert: { _id: DEMO_USER_ID, email: "demo@career-os.dev" } },
+      { upsert: true }
+    );
 
     // Save or find CV version
-    let cvVersion = await db.cvVersion.findFirst({
-      where: { userId: DEMO_USER_ID, name: data.cvName },
-    });
+    let cvVersion = await CvVersionModel.findOne({ userId: DEMO_USER_ID, name: data.cvName });
 
     if (!cvVersion) {
-      cvVersion = await db.cvVersion.create({
-        data: {
-          userId: DEMO_USER_ID,
-          name: data.cvName,
-          content: data.cvContent,
-        },
+      cvVersion = await CvVersionModel.create({
+        userId: DEMO_USER_ID,
+        name: data.cvName,
+        content: data.cvContent,
       });
     }
 
@@ -43,20 +44,18 @@ export async function POST(request: Request) {
     const result = await analyzeResumeMatch(data.cvContent, data.jobDescription);
 
     // Save to database
-    const aiMatch = await db.aiMatch.create({
-      data: {
-        applicationId: data.applicationId || null,
-        cvVersionId: cvVersion.id,
-        matchScore: result.matchScore,
-        missingSkills: result.missingSkills,
-        keywords: result.keywords,
-        insights: result.insights,
-        jobDescription: data.jobDescription,
-      },
+    const aiMatch = await AiMatchModel.create({
+      applicationId: data.applicationId ?? null,
+      cvVersionId: cvVersion._id,
+      matchScore: result.matchScore,
+      missingSkills: result.missingSkills,
+      keywords: result.keywords,
+      insights: result.insights,
+      jobDescription: data.jobDescription,
     });
 
     return NextResponse.json({
-      ...aiMatch,
+      ...(aiMatch.toJSON() as Record<string, unknown>),
       matchScore: result.matchScore,
       missingSkills: result.missingSkills,
       keywords: result.keywords,
@@ -73,11 +72,15 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const matches = await db.aiMatch.findMany({
-      include: { cvVersion: true, application: true },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
+    await connectDB();
+    void CvVersionModel;
+    void ApplicationModel;
+    const matches = await AiMatchModel
+      .find()
+      .populate("cvVersion")
+      .populate("application")
+      .sort({ createdAt: -1 })
+      .limit(20);
     return NextResponse.json(matches);
   } catch (error) {
     console.error("GET /api/ai/match error:", error);

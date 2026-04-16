@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { z } from "zod";
+import { connectDB } from "@/lib/db";
+import { ApplicationModel } from "@/models/Application";
+import { ReminderModel } from "@/models/Reminder";
+import { AiMatchModel } from "@/models/AiMatch";
 
 const updateSchema = z.object({
   company: z.string().min(1).max(200).optional(),
@@ -20,11 +23,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await connectDB();
     const { id } = await params;
-    const application = await db.application.findUnique({
-      where: { id },
-      include: { reminders: true, aiMatches: true },
-    });
+    const application = await ApplicationModel.findById(id)
+      .populate("reminders")
+      .populate("aiMatches");
 
     if (!application) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -42,6 +45,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await connectDB();
     const { id } = await params;
     const body = await request.json();
     const data = updateSchema.parse(body);
@@ -60,25 +64,18 @@ export async function PATCH(
 
     // If moving to APPLIED status, auto-create follow-up reminder
     if (data.status === "APPLIED") {
-      const existing = await db.application.findUnique({ where: { id } });
+      const existing = await ApplicationModel.findById(id);
       if (existing && existing.status !== "APPLIED") {
-        await db.reminder.create({
-          data: {
-            applicationId: id,
-            type: "FOLLOW_UP",
-            sendAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-            message: `Follow up with ${existing.company} about ${existing.role}`,
-          },
+        await ReminderModel.create({
+          applicationId: id,
+          type: "FOLLOW_UP",
+          sendAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+          message: `Follow up with ${existing.company} about ${existing.role}`,
         });
       }
     }
 
-    const application = await db.application.update({
-      where: { id },
-      data: updateData,
-      include: { reminders: true },
-    });
-
+    const application = await ApplicationModel.findByIdAndUpdate(id, updateData, { new: true }).populate("reminders");
     return NextResponse.json(application);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -94,8 +91,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await connectDB();
     const { id } = await params;
-    await db.application.delete({ where: { id } });
+    await ReminderModel.deleteMany({ applicationId: id });
+    await AiMatchModel.deleteMany({ applicationId: id });
+    await ApplicationModel.findByIdAndDelete(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/applications/[id] error:", error);

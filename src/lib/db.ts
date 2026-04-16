@@ -1,20 +1,19 @@
-import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import mongoose from "mongoose";
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+const MONGODB_URI = process.env.DATABASE_URL!;
 
-function createPrismaClient() {
-  const dbUrl = new URL(process.env.DATABASE_URL!);
-  const adapter = new PrismaMariaDb({
-    host: dbUrl.hostname,
-    port: Number(dbUrl.port) || 3306,
-    user: decodeURIComponent(dbUrl.username),
-    password: decodeURIComponent(dbUrl.password),
-    database: dbUrl.pathname.slice(1),
-  });
-  return new PrismaClient({ adapter });
+const cached: { promise: Promise<void> | null } = { promise: null };
+
+export async function connectDB() {
+  if (mongoose.connection.readyState >= 1) return;
+  if (!cached.promise) {
+    cached.promise = mongoose
+      .connect(MONGODB_URI)
+      .then(() => {})
+      .catch((err) => {
+        cached.promise = null;
+        throw err;
+      });
+  }
+  await cached.promise;
 }
-
-export const db = globalForPrisma.prisma || createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
