@@ -5,12 +5,15 @@ An intelligent career management SaaS that goes beyond basic CRUD. Track applica
 ## Features
 
 ### Application Kanban Pipeline
+
 Drag-and-drop board with columns: **Wishlist → Applied → Interview → Offer → Rejected**
 
 Each card tracks company, role, salary, source, deadline, notes, and reminder badges.
 
 ### AI Resume Match
+
 Upload your CV + paste a job description. The system returns:
+
 - **Match score %** — semantic similarity analysis
 - **Missing skills** — gaps between your CV and the JD
 - **Recommended keywords** — terms to add to your CV
@@ -19,7 +22,9 @@ Upload your CV + paste a job description. The system returns:
 Results are persisted to compare CV versions over time.
 
 ### Smart Reminder Engine
+
 Automated workflows:
+
 - Follow-up reminder after 5 days of no response
 - Interview reminder 24h before
 - Deadline alerts
@@ -27,15 +32,19 @@ Automated workflows:
 Email delivery via **Resend** with Vercel Cron scheduling.
 
 ### AI Follow-up Email Generator
+
 Generate personalized recruiter follow-up emails based on company, role, days since application, and interview stage. One-click copy.
 
 ### Interview Prep Generator
+
 AI generates likely questions in three categories:
+
 - Technical questions
 - Behavioral/HR questions
 - Company-specific questions
 
 ### Analytics Dashboard
+
 - Applications per week (bar chart)
 - Response rate / Rejection rate / Interview conversion
 - Pipeline distribution (stacked bar)
@@ -45,20 +54,21 @@ AI generates likely questions in three categories:
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16, React 19, Tailwind CSS 4 |
-| UI Components | Custom shadcn-style primitives |
-| Drag & Drop | @dnd-kit |
-| Backend | Next.js API Routes |
-| Database | PostgreSQL + Prisma ORM |
-| AI | OpenAI GPT-4o-mini |
-| Email | Resend |
-| Deployment | Vercel + Neon/Supabase |
+| Layer         | Technology                           |
+| ------------- | ------------------------------------ |
+| Frontend      | Next.js 16, React 19, Tailwind CSS 4 |
+| UI Components | Custom shadcn-style primitives       |
+| Drag & Drop   | @dnd-kit                             |
+| Backend       | Next.js API Routes                   |
+| Database      | PostgreSQL + Prisma ORM              |
+| AI            | OpenAI GPT-4o-mini                   |
+| Email         | Resend                               |
+| Deployment    | Vercel + Neon/Supabase               |
 
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - PostgreSQL database (local or hosted via Neon/Supabase)
 - OpenAI API key

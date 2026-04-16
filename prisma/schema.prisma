@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 model User {
@@ -27,10 +27,10 @@ model Application {
   status      ApplicationStatus @default(WISHLIST)
   appliedAt   DateTime?
   deadline    DateTime?
-  notes       String?
+  notes       String?           @db.Text
   salaryRange String?
   source      String?
-  url         String?
+  url         String?           @db.Text
   order       Int               @default(0)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
@@ -57,7 +57,7 @@ model Reminder {
   sendAt        DateTime
   sent          Boolean     @default(false)
   sentAt        DateTime?
-  message       String?
+  message       String?      @db.Text
   createdAt     DateTime    @default(now())
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
@@ -75,7 +75,7 @@ model CvVersion {
   id        String    @id @default(cuid())
   userId    String
   name      String
-  content   String
+  content   String    @db.LongText
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   aiMatches AiMatch[]
@@ -88,10 +88,10 @@ model AiMatch {
   applicationId   String?
   cvVersionId     String
   matchScore      Float
-  missingSkills   String[]
-  keywords        String[]
-  insights        String?
-  jobDescription  String
+  missingSkills   Json
+  keywords        Json
+  insights        String?      @db.Text
+  jobDescription  String       @db.Text
   createdAt       DateTime     @default(now())
   application     Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   cvVersion       CvVersion    @relation(fields: [cvVersionId], references: [id], onDelete: Cascade)
